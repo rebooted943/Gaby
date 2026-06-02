@@ -12,6 +12,8 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { ExhibitionAdmin } from "@/components/admin/exhibition-admin";
+import { AdminImageUpload } from "@/components/admin/image-upload";
+import { ensureStoredImageUrl, uploadAsset } from "@/lib/storage-upload";
 
 export const Route = createFileRoute("/admin")({ component: AdminPage });
 
@@ -201,22 +203,33 @@ function RecordForm({
 
   const uploadFile = async (file: File, fieldName: string) => {
     setUploading(true);
-    const path = `${table}/${Date.now()}-${file.name.replace(/[^a-z0-9._-]/gi, "_")}`;
-    const { error } = await supabase.storage.from("artwork-images").upload(path, file, { upsert: false });
-    if (error) { toast.error(error.message); setUploading(false); return; }
-    const { data } = supabase.storage.from("artwork-images").getPublicUrl(path);
-    update(fieldName, data.publicUrl);
+    const { url, error } = await uploadAsset(table, file);
     setUploading(false);
+    if (error || !url) {
+      toast.error(error ?? "Upload failed");
+      return;
+    }
+    update(fieldName, url);
   };
 
   const save = async (e: React.FormEvent) => {
-    e.preventDefault(); setSaving(true);
+    e.preventDefault();
+    setSaving(true);
     const payload: Row = {};
-    for (const f of fields) {
-      let v = form[f.name];
-      if (f.kind === "number") v = v === "" || v == null ? null : Number(v);
-      if (f.kind === "date") v = v || null;
-      payload[f.name] = v;
+    try {
+      for (const f of fields) {
+        let v = form[f.name];
+        if (f.kind === "number") v = v === "" || v == null ? null : Number(v);
+        if (f.kind === "date") v = v || null;
+        if (f.kind === "image" && typeof v === "string" && v.trim()) {
+          v = await ensureStoredImageUrl(v, table);
+        }
+        payload[f.name] = v;
+      }
+    } catch (err) {
+      setSaving(false);
+      toast.error(err instanceof Error ? err.message : "Image import failed");
+      return;
     }
     const isUpdate = !!form.id;
     const tbl = supabase.from(table) as any;
@@ -225,13 +238,24 @@ function RecordForm({
       : await tbl.insert(payload);
     setSaving(false);
     if (res.error) toast.error(res.error.message);
-    else { toast.success("Saved"); onSaved(); }
+    else {
+      toast.success("Saved");
+      onSaved();
+    }
   };
 
   return (
     <form onSubmit={save} className="space-y-5 border border-border/60 bg-card/30 p-6">
       {fields.map((f) => (
-        <Field key={f.name} field={f} value={form[f.name] ?? ""} onChange={(v) => update(f.name, v)} onUpload={(file) => uploadFile(file, f.name)} uploading={uploading} />
+        <Field
+          key={f.name}
+          field={f}
+          storageFolder={table}
+          value={form[f.name] ?? ""}
+          onChange={(v) => update(f.name, v)}
+          onUpload={(file) => uploadFile(file, f.name)}
+          uploading={uploading}
+        />
       ))}
       <div className="flex justify-end gap-3">
         <Button type="button" variant="ghost" onClick={onCancel}>{t.admin.cancel}</Button>
@@ -241,8 +265,21 @@ function RecordForm({
   );
 }
 
-function Field({ field, value, onChange, onUpload, uploading }: { field: Field; value: any; onChange: (v: any) => void; onUpload: (f: File) => void; uploading: boolean }) {
-  const { t } = useI18n();
+function Field({
+  field,
+  storageFolder,
+  value,
+  onChange,
+  onUpload,
+  uploading,
+}: {
+  field: Field;
+  storageFolder: string;
+  value: any;
+  onChange: (v: any) => void;
+  onUpload: (f: File) => void;
+  uploading: boolean;
+}) {
   const wrap = (node: ReactNode) => (
     <div className="space-y-2">
       <Label>{field.label}</Label>
@@ -265,20 +302,14 @@ function Field({ field, value, onChange, onUpload, uploading }: { field: Field; 
       );
     case "image":
       return (
-        <div className="space-y-2">
-          <Label>{field.label}</Label>
-          <Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} placeholder="https://…" />
-          <div className="flex items-center gap-3">
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) onUpload(f); }}
-              className="text-xs"
-            />
-            {uploading && <span className="text-xs text-muted-foreground">{t.admin.uploading}</span>}
-          </div>
-          {value && <img src={value} alt="" className="mt-2 max-h-40 object-contain" />}
-        </div>
+        <AdminImageUpload
+          label={field.label}
+          folder={storageFolder}
+          url={value ?? ""}
+          onUrl={onChange}
+          onFile={onUpload}
+          uploading={uploading}
+        />
       );
     default:
       return wrap(<Input value={value ?? ""} onChange={(e) => onChange(e.target.value)} />);

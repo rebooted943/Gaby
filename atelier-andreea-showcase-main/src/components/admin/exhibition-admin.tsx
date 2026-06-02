@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useI18n } from "@/lib/i18n";
-import { slugify, uploadAsset } from "@/lib/storage-upload";
+import { ensureStoredImageUrl, slugify, uploadAsset } from "@/lib/storage-upload";
+import { AdminImageUpload } from "@/components/admin/image-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -157,6 +158,34 @@ export function ExhibitionAdmin() {
     let slug = editing.slug.trim() || slugify(editing.title_en);
     if (!slug) slug = `exhibition-${Date.now()}`;
 
+    let poster_url = "";
+    const galleryRows: GalleryRow[] = [];
+    const venueRows: VenueRow[] = [];
+
+    try {
+      if (editing.poster_url.trim()) {
+        poster_url = await ensureStoredImageUrl(editing.poster_url, "exhibitions/posters");
+      }
+      for (const g of editing.gallery) {
+        if (!g.image_url.trim()) continue;
+        galleryRows.push({
+          ...g,
+          image_url: await ensureStoredImageUrl(g.image_url, "exhibitions/gallery"),
+          sort_order: galleryRows.length,
+        });
+      }
+      for (const v of editing.venues) {
+        const image_url = v.image_url.trim()
+          ? await ensureStoredImageUrl(v.image_url, "exhibitions/venues")
+          : "";
+        venueRows.push({ ...v, image_url, sort_order: venueRows.length });
+      }
+    } catch (err) {
+      setSaving(false);
+      toast.error(err instanceof Error ? err.message : "Image import failed");
+      return;
+    }
+
     const payload = {
       slug,
       title_en: editing.title_en,
@@ -169,7 +198,7 @@ export function ExhibitionAdmin() {
       end_date: editing.end_date || null,
       venue_en: editing.venue_en,
       venue_ro: editing.venue_ro,
-      poster_url: editing.poster_url,
+      poster_url,
       artist_name: editing.artist_name,
       curator_name_en: editing.curator_name_en,
       curator_name_ro: editing.curator_name_ro,
@@ -205,9 +234,9 @@ export function ExhibitionAdmin() {
       supabase.from("exhibition_projects").delete().eq("exhibition_id", exhibitionId),
     ]);
 
-    if (editing.gallery.length) {
-      await supabase.from("exhibition_gallery_images").insert(
-        editing.gallery.map((g, i) => ({
+    if (galleryRows.length) {
+      const { error } = await supabase.from("exhibition_gallery_images").insert(
+        galleryRows.map((g, i) => ({
           exhibition_id: exhibitionId!,
           image_url: g.image_url,
           caption_en: g.caption_en,
@@ -215,10 +244,15 @@ export function ExhibitionAdmin() {
           sort_order: g.sort_order ?? i,
         })),
       );
+      if (error) {
+        setSaving(false);
+        toast.error(error.message);
+        return;
+      }
     }
-    if (editing.venues.length) {
-      await supabase.from("exhibition_venues").insert(
-        editing.venues.map((v, i) => ({
+    if (venueRows.length) {
+      const { error } = await supabase.from("exhibition_venues").insert(
+        venueRows.map((v, i) => ({
           exhibition_id: exhibitionId!,
           title_en: v.title_en,
           title_ro: v.title_ro,
@@ -227,9 +261,14 @@ export function ExhibitionAdmin() {
           sort_order: v.sort_order ?? i,
         })),
       );
+      if (error) {
+        setSaving(false);
+        toast.error(error.message);
+        return;
+      }
     }
     if (editing.press.length) {
-      await supabase.from("exhibition_press_links").insert(
+      const { error } = await supabase.from("exhibition_press_links").insert(
         editing.press.map((p, i) => ({
           exhibition_id: exhibitionId!,
           title_en: p.title_en,
@@ -238,15 +277,25 @@ export function ExhibitionAdmin() {
           sort_order: p.sort_order ?? i,
         })),
       );
+      if (error) {
+        setSaving(false);
+        toast.error(error.message);
+        return;
+      }
     }
     if (editing.project_ids.length) {
-      await supabase.from("exhibition_projects").insert(
+      const { error } = await supabase.from("exhibition_projects").insert(
         editing.project_ids.map((project_id, i) => ({
           exhibition_id: exhibitionId!,
           project_id,
           sort_order: i,
         })),
       );
+      if (error) {
+        setSaving(false);
+        toast.error(error.message);
+        return;
+      }
     }
 
     setSaving(false);
@@ -317,7 +366,7 @@ export function ExhibitionAdmin() {
       </AdminSection>
 
       <AdminSection title={t.admin.exhibitions.sections.credits}>
-        <ImageUpload label={t.admin.exhibitions.fields.poster} url={editing.poster_url} onUrl={(u) => set("poster_url", u)} onFile={(f) => upload(f, "exhibitions/posters", (u) => set("poster_url", u))} uploading={uploading} />
+        <AdminImageUpload folder="exhibitions/posters" label={t.admin.exhibitions.fields.poster} url={editing.poster_url} onUrl={(u) => set("poster_url", u)} onFile={(f) => upload(f, "exhibitions/posters", (u) => set("poster_url", u))} uploading={uploading} />
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <Field label={t.admin.exhibitions.fields.artist_name}><Input value={editing.artist_name} onChange={(e) => set("artist_name", e.target.value)} /></Field>
           <Field label={t.admin.exhibitions.fields.curator_en}><Input value={editing.curator_name_en} onChange={(e) => set("curator_name_en", e.target.value)} /></Field>
@@ -332,7 +381,7 @@ export function ExhibitionAdmin() {
       <AdminSection title={t.admin.exhibitions.sections.gallery}>
         {editing.gallery.map((row, i) => (
           <div key={i} className="mb-4 space-y-3 border border-border/40 p-4">
-            <ImageUpload label={`${t.admin.exhibitions.fields.galleryImage} ${i + 1}`} url={row.image_url} onUrl={(u) => { const g = [...editing.gallery]; g[i] = { ...g[i], image_url: u }; set("gallery", g); }} onFile={(f) => upload(f, "exhibitions/gallery", (u) => { const g = [...editing.gallery]; g[i] = { ...g[i], image_url: u }; set("gallery", g); })} uploading={uploading} />
+            <AdminImageUpload folder="exhibitions/gallery" label={`${t.admin.exhibitions.fields.galleryImage} ${i + 1}`} url={row.image_url} onUrl={(u) => { const g = [...editing.gallery]; g[i] = { ...g[i], image_url: u }; set("gallery", g); }} onFile={(f) => upload(f, "exhibitions/gallery", (u) => { const g = [...editing.gallery]; g[i] = { ...g[i], image_url: u }; set("gallery", g); })} uploading={uploading} />
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t.admin.exhibitions.fields.caption_en}><Input value={row.caption_en} onChange={(e) => { const g = [...editing.gallery]; g[i] = { ...g[i], caption_en: e.target.value }; set("gallery", g); }} /></Field>
               <Field label={t.admin.exhibitions.fields.caption_ro}><Input value={row.caption_ro} onChange={(e) => { const g = [...editing.gallery]; g[i] = { ...g[i], caption_ro: e.target.value }; set("gallery", g); }} /></Field>
@@ -353,7 +402,7 @@ export function ExhibitionAdmin() {
               <Field label={t.admin.fields.title_ro}><Input value={row.title_ro} onChange={(e) => { const v = [...editing.venues]; v[i] = { ...v[i], title_ro: e.target.value }; set("venues", v); }} /></Field>
               <Field label={t.admin.exhibitions.fields.external_url}><Input value={row.external_url} onChange={(e) => { const v = [...editing.venues]; v[i] = { ...v[i], external_url: e.target.value }; set("venues", v); }} /></Field>
             </div>
-            <ImageUpload label={t.admin.fields.image_url} url={row.image_url} onUrl={(u) => { const v = [...editing.venues]; v[i] = { ...v[i], image_url: u }; set("venues", v); }} onFile={(f) => upload(f, "exhibitions/venues", (u) => { const v = [...editing.venues]; v[i] = { ...v[i], image_url: u }; set("venues", v); })} uploading={uploading} />
+            <AdminImageUpload folder="exhibitions/venues" label={t.admin.fields.image_url} url={row.image_url} onUrl={(u) => { const v = [...editing.venues]; v[i] = { ...v[i], image_url: u }; set("venues", v); }} onFile={(f) => upload(f, "exhibitions/venues", (u) => { const v = [...editing.venues]; v[i] = { ...v[i], image_url: u }; set("venues", v); })} uploading={uploading} />
             <Button type="button" variant="ghost" size="sm" onClick={() => set("venues", editing.venues.filter((_, j) => j !== i))}>{t.admin.delete}</Button>
           </div>
         ))}
@@ -431,29 +480,6 @@ function Field({ label, children, className }: { label: string; children: React.
     <div className={className}>
       <Label className="mb-2 block">{label}</Label>
       {children}
-    </div>
-  );
-}
-
-function ImageUpload({
-  label, url, onUrl, onFile, uploading,
-}: {
-  label: string;
-  url: string;
-  onUrl: (url: string) => void;
-  onFile: (file: File) => void;
-  uploading: boolean;
-}) {
-  const { t } = useI18n();
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Input value={url} onChange={(e) => onUrl(e.target.value)} placeholder="https://…" />
-      <div className="flex items-center gap-3">
-        <input type="file" accept="image/*" className="text-xs" onChange={(e) => { const f = e.target.files?.[0]; if (f) onFile(f); }} />
-        {uploading && <span className="text-xs text-muted-foreground">{t.admin.uploading}</span>}
-      </div>
-      {url && <img src={url} alt="" className="mt-2 max-h-48 object-contain" />}
     </div>
   );
 }

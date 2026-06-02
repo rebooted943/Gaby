@@ -301,8 +301,15 @@ export function isMockExhibitionId(id: string): boolean {
   return id.startsWith("mock-exhibition-");
 }
 
-export function getMockExhibitionDetail(id: string): ExhibitionDetail | null {
-  return MOCK_EXHIBITION_DETAILS[id] ?? null;
+export function isMockExhibitionKey(slugOrId: string): boolean {
+  if (isMockExhibitionId(slugOrId)) return true;
+  return MOCK_EXHIBITION_LIST.some((e) => e.slug === slugOrId);
+}
+
+export function getMockExhibitionDetail(slugOrId: string): ExhibitionDetail | null {
+  if (MOCK_EXHIBITION_DETAILS[slugOrId]) return MOCK_EXHIBITION_DETAILS[slugOrId];
+  const ex = MOCK_EXHIBITION_LIST.find((e) => e.slug === slugOrId);
+  return ex ? (MOCK_EXHIBITION_DETAILS[ex.id] ?? null) : null;
 }
 
 export function exhibitionsWithMocks(dbList: Exhibition[]): Exhibition[] {

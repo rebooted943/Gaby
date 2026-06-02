@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ArtworkImageButton, useImageLightbox, type LightboxImage } from "@/components/image-lightbox";
 import { useI18n, pick } from "@/lib/i18n";
 import { fetchPublishedExhibitions, formatExhibitionDates } from "@/lib/exhibitions";
 import { fetchProjects } from "@/lib/projects";
@@ -32,6 +34,34 @@ function Index() {
       return data;
     },
   });
+
+  const homeProjectLightbox = useMemo(() => {
+    const images: LightboxImage[] = [];
+    const indexById = new Map<string, number>();
+    for (const p of projects.data ?? []) {
+      if (p.image_url) {
+        indexById.set(p.id, images.length);
+        images.push({ src: p.image_url, alt: pick(lang, p.title_en, p.title_ro) });
+      }
+    }
+    return { images, indexById };
+  }, [projects.data, lang]);
+
+  const { openAt: openProjectAt, lightbox: projectLightbox } = useImageLightbox(homeProjectLightbox.images);
+
+  const homeShopLightbox = useMemo(() => {
+    const images: LightboxImage[] = [];
+    const indexById = new Map<string, number>();
+    for (const s of shop.data ?? []) {
+      if (s.image_url) {
+        indexById.set(s.id, images.length);
+        images.push({ src: s.image_url, alt: pick(lang, s.title_en, s.title_ro) });
+      }
+    }
+    return { images, indexById };
+  }, [shop.data, lang]);
+
+  const { openAt: openShopAt, lightbox: shopLightbox } = useImageLightbox(homeShopLightbox.images);
   const exhibitions = useQuery({
     queryKey: ["exhibitions-home"],
     queryFn: async () => {
@@ -131,23 +161,30 @@ function Index() {
           className="mb-16"
         />
         {projects.data && projects.data.length > 0 ? (
-          <div className="columns-1 gap-6 sm:columns-2 lg:columns-3 [column-fill:_balance]">
-            {projects.data.map((p, i) => (
-              <Reveal key={p.id} delay={i * 90} className="mb-6 break-inside-avoid">
-                <Link to="/projects" className="artwork-card group block overflow-hidden bg-card">
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={pick(lang, p.title_en, p.title_ro)} className="w-full" loading="lazy" />
-                  ) : (
-                    <div className="aspect-[4/5] w-full bg-muted" />
-                  )}
-                  <div className="p-5 transition-colors duration-700 group-hover:bg-card/80">
-                    <h3 className="font-display text-2xl italic text-foreground">{pick(lang, p.title_en, p.title_ro)}</h3>
-                    {p.year && <p className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{p.year}</p>}
-                  </div>
-                </Link>
-              </Reveal>
-            ))}
-          </div>
+          <>
+            <div className="columns-1 gap-6 sm:columns-2 lg:columns-3 [column-fill:_balance]">
+              {projects.data.map((p, i) => (
+                <Reveal key={p.id} delay={i * 90} className="mb-6 break-inside-avoid">
+                  <article className="artwork-protected artwork-card group overflow-hidden bg-card">
+                    {p.image_url ? (
+                      <ArtworkImageButton
+                        image={{ src: p.image_url, alt: pick(lang, p.title_en, p.title_ro) }}
+                        onOpen={() => openProjectAt(homeProjectLightbox.indexById.get(p.id) ?? 0)}
+                        imgClassName="w-full"
+                      />
+                    ) : (
+                      <div className="aspect-[4/5] w-full bg-muted" />
+                    )}
+                    <Link to="/projects" className="block p-5 transition-colors duration-700 group-hover:bg-card/80">
+                      <h3 className="font-display text-2xl italic text-foreground">{pick(lang, p.title_en, p.title_ro)}</h3>
+                      {p.year && <p className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{p.year}</p>}
+                    </Link>
+                  </article>
+                </Reveal>
+              ))}
+            </div>
+            {projectLightbox}
+          </>
         ) : (
           <Reveal>
             <p className="max-w-3xl font-display text-xl italic text-muted-foreground">{t.home.empty}</p>
@@ -179,29 +216,30 @@ function Index() {
                 });
                 return (
                   <Reveal key={s.id} delay={i * 90} variant="scale">
-                    <Link to="/shop" className="group block">
+                    <article className="artwork-protected group block">
                       <div className="artwork-card relative overflow-hidden bg-card">
                         {s.image_url ? (
-                          <img
-                            src={s.image_url}
-                            alt={pick(lang, s.title_en, s.title_ro)}
-                            className="aspect-[4/5] w-full object-cover"
-                            loading="lazy"
+                          <ArtworkImageButton
+                            image={{ src: s.image_url, alt: pick(lang, s.title_en, s.title_ro) }}
+                            onOpen={() => openShopAt(homeShopLightbox.indexById.get(s.id) ?? 0)}
+                            imgClassName="aspect-[4/5] w-full object-cover"
                           />
                         ) : (
                           <div className="aspect-[4/5] w-full bg-muted" />
                         )}
                         {!s.available && (
-                          <span className="absolute left-4 top-4 bg-background/90 px-3 py-1 text-xs uppercase tracking-[0.28em] text-foreground">
+                          <span className="pointer-events-none absolute left-4 top-4 z-10 bg-background/90 px-3 py-1 text-xs uppercase tracking-[0.28em] text-foreground">
                             {t.shop.sold}
                           </span>
                         )}
                       </div>
-                      <h3 className="mt-4 font-display text-2xl italic text-foreground">
-                        {pick(lang, s.title_en, s.title_ro)}
-                      </h3>
-                      <p className="mt-1 font-display text-lg text-primary">{fmt.format(Number(s.price))}</p>
-                    </Link>
+                      <Link to="/shop" className="block">
+                        <h3 className="mt-4 font-display text-2xl italic text-foreground">
+                          {pick(lang, s.title_en, s.title_ro)}
+                        </h3>
+                        <p className="mt-1 font-display text-lg text-primary">{fmt.format(Number(s.price))}</p>
+                      </Link>
+                    </article>
                   </Reveal>
                 );
               })}
@@ -211,6 +249,7 @@ function Index() {
               <p className="max-w-3xl font-display text-xl italic text-muted-foreground">{t.home.empty}</p>
             </Reveal>
           )}
+          {shopLightbox}
         </div>
       </section>
 
@@ -233,7 +272,7 @@ function Index() {
             <div className="space-y-8">
               {exhibitions.data && exhibitions.data.length > 0 ? exhibitions.data.map((e, i) => (
                 <Reveal key={e.id} delay={i * 100} variant="fade-right">
-                  <Link to="/exhibitions/$exhibitionId" params={{ exhibitionId: e.id }} className="event-line block border-l-2 border-primary/60 pl-6">
+                  <Link to="/exhibitions/$slug" params={{ slug: e.slug }} className="event-line block border-l-2 border-primary/60 pl-6">
                     <p className="text-xs uppercase tracking-[0.28em] text-primary">
                       {formatExhibitionDates(e.start_date, e.end_date, lang)}
                     </p>

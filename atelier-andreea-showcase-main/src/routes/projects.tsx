@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isMockProjectId } from "@/data/projects-mock";
+import { ClickableArtworkMasonry } from "@/components/image-lightbox";
 import { MockPreviewBanner } from "@/components/mock-preview-banner";
 import { useI18n, pick } from "@/lib/i18n";
 import { fetchProjects } from "@/lib/projects";
@@ -29,6 +31,37 @@ function Projects() {
 
   const showingMocks = data?.some((p) => isMockProjectId(p.id)) ?? false;
 
+  const masonryItems = useMemo(
+    () =>
+      (data ?? []).map((p) => {
+        const title = pick(lang, p.title_en, p.title_ro);
+        const description = pick(lang, p.description_en, p.description_ro);
+        return {
+          key: p.id,
+          image: p.image_url
+            ? {
+                src: p.image_url,
+                alt: title,
+                caption: [title, p.year ? String(p.year) : "", p.museum].filter(Boolean).join(" · "),
+              }
+            : null,
+          content: (
+            <div className="space-y-3 p-6 transition-colors duration-700 group-hover:bg-card/80">
+              <h2 className="font-display text-3xl italic text-foreground">{title}</h2>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">
+                {p.year && <span>{t.projects.year} {p.year}</span>}
+                {p.museum && <span>· {t.projects.museum}: {p.museum}</span>}
+              </div>
+              {(description ?? "").trim() && (
+                <p className="pt-2 text-sm leading-relaxed text-foreground/80">{description}</p>
+              )}
+            </div>
+          ),
+        };
+      }),
+    [data, lang, t.projects.year, t.projects.museum],
+  );
+
   return (
     <PageShell>
       <PageHeader eyebrow={t.projects.eyebrow} title={t.projects.title} />
@@ -37,31 +70,7 @@ function Projects() {
 
       <PageBody>
         {data && data.length > 0 ? (
-          <div className="columns-1 gap-8 sm:columns-2 lg:columns-3 [column-fill:_balance]">
-            {data.map((p, i) => (
-              <Reveal key={p.id} delay={(i % 6) * 70} className="mb-8 break-inside-avoid">
-                <article className="artwork-card group bg-card">
-                  {p.image_url ? (
-                    <img src={p.image_url} alt={pick(lang, p.title_en, p.title_ro)} className="w-full overflow-hidden" loading="lazy" />
-                  ) : (
-                    <div className="aspect-[4/5] w-full bg-muted" />
-                  )}
-                  <div className="space-y-3 p-6 transition-colors duration-700 group-hover:bg-card/80">
-                    <h2 className="font-display text-3xl italic text-foreground">{pick(lang, p.title_en, p.title_ro)}</h2>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs uppercase tracking-[0.22em] text-muted-foreground">
-                      {p.year && <span>{t.projects.year} {p.year}</span>}
-                      {p.museum && <span>· {t.projects.museum}: {p.museum}</span>}
-                    </div>
-                    {(pick(lang, p.description_en, p.description_ro) ?? "").trim() && (
-                      <p className="pt-2 text-sm leading-relaxed text-foreground/80">
-                        {pick(lang, p.description_en, p.description_ro)}
-                      </p>
-                    )}
-                  </div>
-                </article>
-              </Reveal>
-            ))}
-          </div>
+          <ClickableArtworkMasonry items={masonryItems} />
         ) : (
           <Reveal>
             <p className="max-w-3xl font-display text-xl italic text-muted-foreground">{t.projects.empty}</p>

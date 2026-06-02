@@ -1,6 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { isMockShopId } from "@/data/shop-mock";
+import { ArtworkImageButton, useImageLightbox, type LightboxImage } from "@/components/image-lightbox";
 import { MockPreviewBanner } from "@/components/mock-preview-banner";
 import { useI18n, pick } from "@/lib/i18n";
 import { fetchShopItems } from "@/lib/shop";
@@ -29,6 +31,24 @@ function Shop() {
 
   const showingMocks = data?.some((s) => isMockShopId(s.id)) ?? false;
 
+  const { images, indexById } = useMemo(() => {
+    const list: LightboxImage[] = [];
+    const map = new Map<string, number>();
+    for (const s of data ?? []) {
+      if (s.image_url) {
+        map.set(s.id, list.length);
+        list.push({
+          src: s.image_url,
+          alt: pick(lang, s.title_en, s.title_ro),
+          caption: pick(lang, s.title_en, s.title_ro),
+        });
+      }
+    }
+    return { images: list, indexById: map };
+  }, [data, lang]);
+
+  const { openAt, lightbox } = useImageLightbox(images);
+
   return (
     <PageShell>
       <PageHeader eyebrow={t.shop.eyebrow} title={t.shop.title} />
@@ -42,20 +62,23 @@ function Shop() {
               const fmt = new Intl.NumberFormat(lang === "ro" ? "ro-RO" : "en-GB", { style: "currency", currency: s.currency || "EUR" });
               return (
                 <Reveal key={s.id} delay={(i % 3) * 100} variant="scale">
-                  <article className="group">
+                  <article className="artwork-protected group">
                     <div className="artwork-card relative overflow-hidden bg-card">
                       {s.image_url ? (
-                        <img
-                          src={s.image_url}
-                          alt={pick(lang, s.title_en, s.title_ro)}
-                          className="aspect-[4/5] w-full object-cover"
-                          loading="lazy"
+                        <ArtworkImageButton
+                          image={{
+                            src: s.image_url,
+                            alt: pick(lang, s.title_en, s.title_ro),
+                            caption: pick(lang, s.title_en, s.title_ro),
+                          }}
+                          onOpen={() => openAt(indexById.get(s.id) ?? 0)}
+                          imgClassName="aspect-[4/5] w-full object-cover"
                         />
                       ) : (
                         <div className="aspect-[4/5] w-full bg-muted" />
                       )}
                       {!s.available && (
-                        <span className="absolute left-4 top-4 bg-background/90 px-3 py-1 text-xs uppercase tracking-[0.28em] text-foreground">
+                        <span className="pointer-events-none absolute left-4 top-4 z-10 bg-background/90 px-3 py-1 text-xs uppercase tracking-[0.28em] text-foreground">
                           {t.shop.sold}
                         </span>
                       )}
@@ -89,6 +112,7 @@ function Shop() {
             <p className="max-w-3xl font-display text-xl italic text-muted-foreground">{t.shop.empty}</p>
           </Reveal>
         )}
+        {lightbox}
       </PageBody>
     </PageShell>
   );

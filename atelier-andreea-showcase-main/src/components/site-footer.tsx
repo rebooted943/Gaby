@@ -11,9 +11,6 @@ export function SiteFooter() {
           <p className="text-eyebrow">{t.footer.rights}</p>
           <p className="mt-2 font-display text-2xl text-foreground">Andreea Gabriela Tudor</p>
         </div>
-        <Link to="/login" className="text-xs uppercase tracking-[0.28em] text-muted-foreground hover:text-foreground">
-          ·
-        </Link>
       </Reveal>
     </footer>
   );

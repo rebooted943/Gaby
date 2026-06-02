@@ -1,25 +1,34 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, redirect } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { isMockExhibitionId } from "@/data/exhibitions-mock";
+import { isMockExhibitionKey } from "@/data/exhibitions-mock";
 import { fetchExhibitionDetail, formatExhibitionDates } from "@/lib/exhibitions";
 import { useI18n, pick } from "@/lib/i18n";
+import { isUuid } from "@/lib/storage-upload";
+import { ClickableGalleryGrid, ProtectedImage } from "@/components/image-lightbox";
 import { MockPreviewBanner } from "@/components/mock-preview-banner";
 import { PageShell } from "@/components/page-shell";
 import { Reveal } from "@/components/reveal";
 import { cn } from "@/lib/utils";
 
-export const Route = createFileRoute("/exhibitions/$exhibitionId")({
-  component: ExhibitionDetail,
+export const Route = createFileRoute("/exhibitions/$slug")({
+  beforeLoad: async ({ params }) => {
+    if (!isUuid(params.slug) || isMockExhibitionKey(params.slug)) return;
+    const { data } = await fetchExhibitionDetail(params.slug);
+    if (data?.slug && data.slug !== params.slug) {
+      throw redirect({ to: "/exhibitions/$slug", params: { slug: data.slug }, replace: true });
+    }
+  },
+  component: ExhibitionDetailPage,
 });
 
-function ExhibitionDetail() {
-  const { exhibitionId } = Route.useParams();
+function ExhibitionDetailPage() {
+  const { slug } = Route.useParams();
   const { t, lang } = useI18n();
 
   const { data: ex, isLoading } = useQuery({
-    queryKey: ["exhibition", exhibitionId],
+    queryKey: ["exhibition", slug],
     queryFn: async () => {
-      const { data } = await fetchExhibitionDetail(exhibitionId);
+      const { data } = await fetchExhibitionDetail(slug);
       return data;
     },
   });
@@ -32,7 +41,7 @@ function ExhibitionDetail() {
     );
   }
 
-  const isMock = isMockExhibitionId(exhibitionId);
+  const isMock = isMockExhibitionKey(slug);
 
   if (!ex) {
     return (
@@ -53,7 +62,7 @@ function ExhibitionDetail() {
     <article>
       {ex.poster_url && (
         <div className="relative isolate max-h-[min(70vh,36rem)] overflow-hidden">
-          <img src={ex.poster_url} alt="" className="h-full w-full object-cover opacity-40" />
+          <ProtectedImage src={ex.poster_url} alt="" className="h-full w-full object-cover opacity-40" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/30 via-background/70 to-background" />
         </div>
       )}
@@ -85,7 +94,7 @@ function ExhibitionDetail() {
             <div className="grid gap-10 lg:grid-cols-[minmax(0,280px)_1fr] lg:items-start">
               {ex.poster_url && (
                 <figure className="overflow-hidden bg-card ring-1 ring-border/50">
-                  <img src={ex.poster_url} alt={title} className="w-full object-cover" />
+                  <ProtectedImage src={ex.poster_url} alt={title} className="w-full object-cover" />
                 </figure>
               )}
               <div className="max-w-2xl space-y-6">
@@ -111,18 +120,15 @@ function ExhibitionDetail() {
 
         {ex.gallery.length > 0 && (
           <ExhibitionSection title={t.exhibitions.sections.gallery}>
-            <div className="columns-1 gap-4 sm:columns-2 lg:columns-3 [column-fill:_balance]">
-              {ex.gallery.map((img, i) => (
-                <Reveal key={img.id} delay={(i % 6) * 60} className="mb-4 break-inside-avoid">
-                  <figure className="overflow-hidden bg-card">
-                    <img src={img.image_url} alt={pick(lang, img.caption_en, img.caption_ro) || title} className="w-full" loading="lazy" />
-                    {pick(lang, img.caption_en, img.caption_ro) && (
-                      <figcaption className="p-3 text-xs text-muted-foreground">{pick(lang, img.caption_en, img.caption_ro)}</figcaption>
-                    )}
-                  </figure>
-                </Reveal>
-              ))}
-            </div>
+            <Reveal>
+              <ClickableGalleryGrid
+                images={ex.gallery.map((img) => ({
+                  src: img.image_url,
+                  alt: pick(lang, img.caption_en, img.caption_ro) || title,
+                  caption: pick(lang, img.caption_en, img.caption_ro) || undefined,
+                }))}
+              />
+            </Reveal>
           </ExhibitionSection>
         )}
 
@@ -131,17 +137,22 @@ function ExhibitionDetail() {
             <div className="columns-1 gap-6 sm:columns-2 lg:columns-3 [column-fill:_balance]">
               {ex.artworks.map((p, i) => (
                 <Reveal key={p.id} delay={(i % 6) * 70} className="mb-6 break-inside-avoid">
-                  <Link to="/projects" className="artwork-card group block overflow-hidden bg-card">
+                  <div className="artwork-protected artwork-card group overflow-hidden bg-card">
                     {p.image_url ? (
-                      <img src={p.image_url} alt={pick(lang, p.title_en, p.title_ro)} className="w-full" loading="lazy" />
+                      <ProtectedImage
+                        src={p.image_url}
+                        alt={pick(lang, p.title_en, p.title_ro)}
+                        className="w-full"
+                        loading="lazy"
+                      />
                     ) : (
                       <div className="aspect-[4/5] bg-muted" />
                     )}
-                    <div className="p-4">
+                    <Link to="/projects" className="block p-4 transition-colors hover:bg-card/80">
                       <h3 className="font-display text-xl italic">{pick(lang, p.title_en, p.title_ro)}</h3>
                       {p.year && <p className="mt-1 text-xs uppercase tracking-widest text-muted-foreground">{p.year}</p>}
-                    </div>
-                  </Link>
+                    </Link>
+                  </div>
                 </Reveal>
               ))}
             </div>
@@ -155,7 +166,7 @@ function ExhibitionDetail() {
                 <Reveal key={v.id} delay={i * 80}>
                   <div className="flex h-full flex-col overflow-hidden bg-card ring-1 ring-border/40">
                     {v.image_url ? (
-                      <img src={v.image_url} alt={pick(lang, v.title_en, v.title_ro)} className="aspect-[4/3] w-full object-cover" loading="lazy" />
+                      <ProtectedImage src={v.image_url} alt={pick(lang, v.title_en, v.title_ro)} className="aspect-[4/3] w-full object-cover" loading="lazy" />
                     ) : (
                       <div className="aspect-[4/3] bg-muted" />
                     )}

@@ -17,7 +17,8 @@ import { Route as EventsRouteImport } from './routes/events'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ExhibitionsExhibitionIdRouteImport } from './routes/exhibitions.$exhibitionId'
+import { Route as ExhibitionsIndexRouteImport } from './routes/exhibitions.index'
+import { Route as ExhibitionsSlugRouteImport } from './routes/exhibitions.$slug'
 
 const ShopRoute = ShopRouteImport.update({
   id: '/shop',
@@ -59,9 +60,14 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ExhibitionsExhibitionIdRoute = ExhibitionsExhibitionIdRouteImport.update({
-  id: '/$exhibitionId',
-  path: '/$exhibitionId',
+const ExhibitionsIndexRoute = ExhibitionsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ExhibitionsRoute,
+} as any)
+const ExhibitionsSlugRoute = ExhibitionsSlugRouteImport.update({
+  id: '/$slug',
+  path: '/$slug',
   getParentRoute: () => ExhibitionsRoute,
 } as any)
 
@@ -74,18 +80,19 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRoute
   '/shop': typeof ShopRoute
-  '/exhibitions/$exhibitionId': typeof ExhibitionsExhibitionIdRoute
+  '/exhibitions/$slug': typeof ExhibitionsSlugRoute
+  '/exhibitions/': typeof ExhibitionsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/admin': typeof AdminRoute
   '/events': typeof EventsRoute
-  '/exhibitions': typeof ExhibitionsRouteWithChildren
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRoute
   '/shop': typeof ShopRoute
-  '/exhibitions/$exhibitionId': typeof ExhibitionsExhibitionIdRoute
+  '/exhibitions/$slug': typeof ExhibitionsSlugRoute
+  '/exhibitions': typeof ExhibitionsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,7 +104,8 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/projects': typeof ProjectsRoute
   '/shop': typeof ShopRoute
-  '/exhibitions/$exhibitionId': typeof ExhibitionsExhibitionIdRoute
+  '/exhibitions/$slug': typeof ExhibitionsSlugRoute
+  '/exhibitions/': typeof ExhibitionsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,18 +118,19 @@ export interface FileRouteTypes {
     | '/login'
     | '/projects'
     | '/shop'
-    | '/exhibitions/$exhibitionId'
+    | '/exhibitions/$slug'
+    | '/exhibitions/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
     | '/admin'
     | '/events'
-    | '/exhibitions'
     | '/login'
     | '/projects'
     | '/shop'
-    | '/exhibitions/$exhibitionId'
+    | '/exhibitions/$slug'
+    | '/exhibitions'
   id:
     | '__root__'
     | '/'
@@ -132,7 +141,8 @@ export interface FileRouteTypes {
     | '/login'
     | '/projects'
     | '/shop'
-    | '/exhibitions/$exhibitionId'
+    | '/exhibitions/$slug'
+    | '/exhibitions/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -204,22 +214,31 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/exhibitions/$exhibitionId': {
-      id: '/exhibitions/$exhibitionId'
-      path: '/$exhibitionId'
-      fullPath: '/exhibitions/$exhibitionId'
-      preLoaderRoute: typeof ExhibitionsExhibitionIdRouteImport
+    '/exhibitions/': {
+      id: '/exhibitions/'
+      path: '/'
+      fullPath: '/exhibitions/'
+      preLoaderRoute: typeof ExhibitionsIndexRouteImport
+      parentRoute: typeof ExhibitionsRoute
+    }
+    '/exhibitions/$slug': {
+      id: '/exhibitions/$slug'
+      path: '/$slug'
+      fullPath: '/exhibitions/$slug'
+      preLoaderRoute: typeof ExhibitionsSlugRouteImport
       parentRoute: typeof ExhibitionsRoute
     }
   }
 }
 
 interface ExhibitionsRouteChildren {
-  ExhibitionsExhibitionIdRoute: typeof ExhibitionsExhibitionIdRoute
+  ExhibitionsSlugRoute: typeof ExhibitionsSlugRoute
+  ExhibitionsIndexRoute: typeof ExhibitionsIndexRoute
 }
 
 const ExhibitionsRouteChildren: ExhibitionsRouteChildren = {
-  ExhibitionsExhibitionIdRoute: ExhibitionsExhibitionIdRoute,
+  ExhibitionsSlugRoute: ExhibitionsSlugRoute,
+  ExhibitionsIndexRoute: ExhibitionsIndexRoute,
 }
 
 const ExhibitionsRouteWithChildren = ExhibitionsRoute._addFileChildren(
