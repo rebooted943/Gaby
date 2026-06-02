@@ -23,10 +23,24 @@ function AdminPage() {
   const { t } = useI18n();
   const { user, isAdmin, loading } = useAuth();
   const navigate = useNavigate();
+  const [diag, setDiag] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
   }, [loading, user, navigate]);
+
+  useEffect(() => {
+    if (!user || isAdmin || loading) return;
+    void (async () => {
+      const rpc = await supabase.rpc("is_admin");
+      const roles = await supabase.from("user_roles").select("role").eq("user_id", user.id);
+      const lines = [
+        rpc.error ? `is_admin(): ${rpc.error.message}` : `is_admin(): ${String(rpc.data)}`,
+        roles.error ? `user_roles: ${roles.error.message}` : `user_roles: ${roles.data?.map((r) => r.role).join(", ") || "(nessuna riga visibile)"}`,
+      ];
+      setDiag(lines.join("\n"));
+    })();
+  }, [user, isAdmin, loading]);
 
   if (loading) return <div className="p-12 text-muted-foreground">…</div>;
   if (!user) return null;
@@ -36,6 +50,14 @@ function AdminPage() {
         <h1 className="font-display text-3xl">Access required</h1>
         <p className="mt-3 text-muted-foreground">This account does not have admin access. Ask the site owner to grant the admin role.</p>
         <p className="mt-2 text-xs text-muted-foreground">Your user id: {user.id}</p>
+        {diag && (
+          <pre className="mt-6 max-h-40 overflow-auto rounded border border-border bg-muted/40 p-3 text-left text-xs text-muted-foreground whitespace-pre-wrap">
+            {diag}
+          </pre>
+        )}
+        <p className="mt-4 text-xs text-muted-foreground">
+          In Supabase → SQL Editor esegui il file <code className="text-foreground">supabase/scripts/fix-admin-access.sql</code>, poi logout e login.
+        </p>
       </div>
     );
   }

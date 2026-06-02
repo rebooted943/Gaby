@@ -17,6 +17,10 @@ const Ctx = createContext<AuthCtx>({
 });
 
 async function fetchIsAdmin(userId: string): Promise<boolean> {
+  const { data: rpcAdmin, error: rpcError } = await supabase.rpc("is_admin");
+  if (!rpcError && rpcAdmin === true) return true;
+  if (rpcError) console.warn("[auth] is_admin:", rpcError.message);
+
   const { data, error } = await supabase
     .from("user_roles")
     .select("role")
