@@ -28,7 +28,7 @@ function Login() {
           setErr(null); setLoading(true);
           const { error } = await signIn(email, password);
           setLoading(false);
-          if (error) setErr(t.login.error);
+          if (error) setErr(error);
           else navigate({ to: "/admin" });
         }}
       >

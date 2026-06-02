@@ -16,6 +16,17 @@ const Ctx = createContext<AuthCtx>({
   signIn: async () => ({ error: null }), signOut: async () => {},
 });
 
+async function fetchIsAdmin(userId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .eq("role", "admin")
+    .maybeSingle();
+  if (error) console.error("[auth] user_roles:", error.message);
+  return !!data;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -25,10 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       if (s?.user) {
-        setTimeout(async () => {
-          const { data } = await supabase.from("user_roles").select("role").eq("user_id", s.user.id).eq("role", "admin").maybeSingle();
-          setIsAdmin(!!data);
-        }, 0);
+        void fetchIsAdmin(s.user.id).then(setIsAdmin);
       } else {
         setIsAdmin(false);
       }
@@ -36,8 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data }) => {
       setSession(data.session);
       if (data.session?.user) {
-        const { data: r } = await supabase.from("user_roles").select("role").eq("user_id", data.session.user.id).eq("role", "admin").maybeSingle();
-        setIsAdmin(!!r);
+        setIsAdmin(await fetchIsAdmin(data.session.user.id));
       }
       setLoading(false);
     });
